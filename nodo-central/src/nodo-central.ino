@@ -66,11 +66,20 @@ const uint64_t pipes[2] = {0xF0F0F0F0E1LL, 0xF0F0F0F0D2LL};
 uint8_t key[] = {111, 109, 97, 114, 108, 101, 111, 110, 97, 114, 100, 111, 122, 97, 109, 98};
 /*End*/
 
+byte pulsadorPin = 7;
+volatile byte pulsadorEstado = 0;
+volatile byte pulsadorEstadoAnterior = 0;
+
 void setup() {
   configSerial();
   configEthernet();
   //sendDataEthernet();
   configRF();
+  configPulsador();
+}
+
+void configPulsador(){
+  pinMode(pulsadorPin, INPUT_PULLUP);
 }
 
 void configSerial() {
@@ -203,6 +212,7 @@ void loop() {
   interactRF();
   // delay(1000); // Quitar, solo sirve para pruebas
   //sendDataEthernet(10, 1);
+  sensarPulsador();
 }
 
 void interactEthernet() {
@@ -240,27 +250,42 @@ void interactRF() {
 
 
   //Serial.print("N");
-  if (radio.available()) { // Si hay datos disponibles
-  //if (true || radio.available()) { // Solo para pruebas
-    char got_isla[2];
-    bool done = false;
-    while (!done) {
-      // Espera aqui hasta recibir algo
-
-      done = radio.read(&got_isla, 2);
-      Serial.print("Dato Recibido = ");
-      Serial.print((int)got_isla[0]);
-      Serial.print(",");
-      Serial.println((int)got_isla[1]);
-      delay(20); // Para dar tiempo al emisor
-    }
-
-    // radio.stopListening(); // Dejamos d escuchar para poder hablar
-    //
-    // radio.write(&got_isla, 2);
-    // Serial.println("Enviando Respuesta");
-    // radio.startListening(); // Volvemos a la escucha para recibir mas
-    // paquetes
-    sendDataEthernet(got_isla[0], got_isla[1]); // Se envía get
+  if(pulsadorEstadoAnterior != pulsadorEstado){
+    sendDataEthernet(1, (int)pulsadorEstado);
+    pulsadorEstadoAnterior = pulsadorEstado;
   }
+
+  // if (radio.available()) { // Si hay datos disponibles
+  // //if (true || radio.available()) { // Solo para pruebas
+  //   char got_isla[2];
+  //   bool done = false;
+  //   while (!done) {
+  //     // Espera aqui hasta recibir algo
+  //
+  //     done = radio.read(&got_isla, 2);
+  //     Serial.print("Dato Recibido = ");
+  //     Serial.print((int)got_isla[0]);
+  //     Serial.print(",");
+  //     Serial.println((int)got_isla[1]);
+  //     delay(20); // Para dar tiempo al emisor
+  //   }
+  //
+  //   // radio.stopListening(); // Dejamos d escuchar para poder hablar
+  //   //
+  //   // radio.write(&got_isla, 2);
+  //   // Serial.println("Enviando Respuesta");
+  //   // radio.startListening(); // Volvemos a la escucha para recibir mas
+  //   // paquetes
+  //   sendDataEthernet(got_isla[0], got_isla[1]); // Se envía get
+  // }
+}
+
+void sensarPulsador(){
+  boolean val = digitalRead(pulsadorPin);   // read the input pin
+  if(val == HIGH){
+    pulsadorEstado = 0;
+  } else {
+    pulsadorEstado = 1;
+  }
+  //Serial.println(pulsadorEstado);
 }
