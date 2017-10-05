@@ -13,6 +13,7 @@
 #include "RF24.h"
 #include "nRF24L01.h"
 #include <SPI.h>
+#include "printf.h" // For test purpose
 /*Fin*/
 
 
@@ -20,23 +21,29 @@
  * Variables Módulo RF
  */
 RF24 radio(9, 10);
-const uint64_t pipes[2] = {0xF0F0F0F0E1LL,
-                           0xF0F0F0F0D2LL}; // LongLong = 64 bits.
+const uint64_t pipes[2] = { 0xF0F0F0F0E1LL, 0xF0F0F0F0D2LL }; // LongLong = 64 bits.
 /*Fin*/
 
 /**
  * Variables Módulo Ultrasonido
  */
+#define ledEstado 4 // Indicador para deteccion del vehículo
 #define trigPin 6
 #define echoPin 5
-#define ledEstado 8 // Indicador para deteccion del vehículo
 
-int limite = 212; // Distancia max entre el suelo y el vehiculo (cms)
+int limiteInferior = 10; // Distancia max entre el suelo y el vehiculo (cms)
+int limiteSuperior = 50; // Distancia max entre el suelo y el vehiculo (cms)
 // 212 cms Toyota Hilux
 long duracion, distancia;
-volatile byte estadoIsla = 0;
+static char idIsla = 1;
+volatile byte estadoIsla = 1;
 /*Fin*/
 
+/**
+ * Variables Módulo Ultrasonido
+ */
+const int pinBateria = A0; // Distancia max entre el suelo y el vehiculo (cms)
+/*Fin*/
 
 void setup(void) {
   configSerial();
@@ -44,18 +51,33 @@ void setup(void) {
   configUltrasonido();
 }
 
-void configSerial() { Serial.begin(9600); }
+void configSerial() { Serial.begin(115200); }
 
 void configRF() {
-  pinMode(10, OUTPUT);
-  radio.begin();
+  printf_begin();
+  printf("\n\rnRF24L01+ SENSOR ISLA\n\r");
+  Serial.println("Config RF 2.4GHz");
+  pinMode(10, OUTPUT); // solo para MEGA
 
-  radio.setRetries(15, 15); // Maximos reintentos
-  // radio.setPayloadSize(8);   // Reduce el payload de 32 si tienes problemas
+  radio.begin();                           // Setup and configure rf radio
+  radio.setChannel(124);
+  //radio.setPALevel(RF24_PA_MIN);
+  radio.setPALevel(RF24_PA_HIGH);
+  radio.setDataRate(RF24_1MBPS);
+  radio.setAutoAck(1);                     // Ensure autoACK is enabled
+  //radio.setCRCLength(RF24_CRC_8);          // Use 8-bit CRC for performance
+  // optionally, increase the delay between retries & # of retries
+  radio.setRetries(15, 15);
+  //radio.setPayloadSize(8);
 
-  // Open pipes to other nodes for communication
   radio.openWritingPipe(pipes[0]);
   radio.openReadingPipe(1, pipes[1]);
+
+  radio.startListening();                 // Start listening
+  //radio.stopListening();
+  delay(500);
+  radio.printDetails();                   // Dump the configuration of the rf unit for debugging
+  Serial.println("End Config RF 2.4GHz");
 }
 
 void configUltrasonido() {
@@ -64,19 +86,22 @@ void configUltrasonido() {
   pinMode(ledEstado, OUTPUT);
 }
 
+void configBateria(){
+  pinMode(pinBateria, INPUT);
+}
+
 void loop(void) {
   enviarDatoRF();
   medirDistancia();
-  delay(1000);
+  medirBateria();
+  delay(500);
 }
 
 void enviarDatoRF() {
   radio.stopListening(); // Paramos la escucha para poder hablar
-  char idIsla = 1;
-  //char estado = 0;
-  char msg[2] = {idIsla, estadoIsla};
+  char msg[2] = {idIsla, (char)estadoIsla};
   // unsigned long time = millis();
-  Serial.print("Enviando  ");
+  Serial.print("Enviando: ");
   Serial.print((int)msg[0]);
   Serial.print(",");
   Serial.println((int)msg[1]);
@@ -84,9 +109,9 @@ void enviarDatoRF() {
   bool ok = radio.write(msg, 2);
 
   if (ok) {
-    Serial.println("ok...");
+    Serial.println(F("ok..."));
   } else {
-    Serial.println("failedEstado");
+    Serial.println(F("failed!!!"));
   }
 
   radio.startListening(); // Volvemos a la escucha
@@ -123,14 +148,19 @@ void medirDistancia() {
   digitalWrite(trigPin, LOW); // Cortamos el pulso y a esperar el echo
   duracion = pulseIn(echoPin, HIGH);
   distancia = duracion / 2 / 29.1;
-  if (distancia < limite) {
-    Serial.println(String(distancia) + " cm.");
+  if (limiteInferior < distancia && distancia < limiteSuperior) {
+    Serial.println(String(distancia) + F(" cm. INSIDE"));
     digitalWrite(ledEstado, HIGH);
     estadoIsla = 1;
   } else {
-    Serial.println(String(distancia) + " cm.");
+    Serial.println(String(distancia) + F(" cm. OUTSIDE"));
     digitalWrite(ledEstado, LOW);
     estadoIsla = 0;
   }
   // delay (500) ;                  // Para limitar el número de mediciones
+}
+
+void medirBateria() {
+  double a = analogRead(pinBateria);
+  Serial.println(String(a/10.23) + F("% Bateria"));
 }

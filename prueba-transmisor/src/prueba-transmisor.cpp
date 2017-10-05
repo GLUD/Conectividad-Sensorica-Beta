@@ -1,52 +1,106 @@
 /*
-* Arduino Wireless Communication Tutorial
-*     Example 2 - Transmitter Code
-*
-* by Dejan Nedelkovski, www.HowToMechatronics.com
-*
-* Library: TMRh20/RF24, https://github.com/tmrh20/RF24/
-*/
+Esta utiliza las bibliotecas:
+http://www.prometec.net/nrf2401/
+https://www.arduino.cc/en/Tutorial/WebClientRepeating
+https://github.com/DavyLandman/AESLib
+ */
+/**
+ * Bibilioteca arduino
+ */
+#include <Arduino.h>
+/*Fin*/
+
+/**
+ * Dependencias módulo de Ethernet
+ */
+#include <Ethernet.h>
 #include <SPI.h>
-#include <nRF24L01.h>
-#include <RF24.h>
+/*Fin*/
 
-#define led 4
+/**
+ * Dependencias módulo RF
+ */
+#include "RF24.h"
+#include "nRF24L01.h"
+#include <SPI.h>
+#include "printf.h" // For test purpose
+/*Fin*/
 
-RF24 radio(9, 10); // CNS, CE
-const byte addresses[][6] = {"00001", "00002"};
-boolean buttonState = 0;
-void setup() {
+/**
+ * Variables Módulo RF
+ */
+RF24 radio(9, 53);
+const uint64_t pipes[2] = { 0xF0F0F0F0E1LL, 0xF0F0F0F0D2LL }; // LongLong = 64 bits.
+/*Fin*/
+
+void configSerial() {
+  // Open serial communications and wait for port to open:
   Serial.begin(115200);
-  pinMode(4, OUTPUT);
-  radio.begin();
-  radio.openWritingPipe(addresses[1]); // 00001
-  radio.openReadingPipe(1, addresses[0]); // 00002
-  //radio.setPALevel(RF24_PA_HIGH);
-  Serial.println("Termine.");
+  while (!Serial) {
+    ; // wait for serial port to connect. Needed for Leonardo only
+  }
 }
-void loop() {
-  delay(5);
-  radio.stopListening();
-  int valor = 234;
-  bool ok = radio.write(&valor, sizeof(valor));
-  if (ok) {
-    Serial.println("ok...");
-  } else {
-    Serial.println("failed");
-  }
 
-  delay(5);
-  Serial.print("Escribi: ");
-  Serial.println(valor);
+void configRF() {
+  printf_begin();
+  printf("\n\rnRF24L01 MEGA 2560\n\r");
+  Serial.println("Config RF 2.4GHz");
+  pinMode(53, OUTPUT); //Only for mega
+
+  radio.begin();
+  radio.setChannel(124);
+  radio.setPALevel(RF24_PA_MIN);
+  radio.setDataRate(RF24_2MBPS);
+  radio.setAutoAck(1);                     // Ensure autoACK is enabled
+  //radio.setCRCLength(RF24_CRC_8);          // Use 8-bit CRC for performance
+  // optionally, increase the delay between retries & # of retries
+  radio.setRetries(15, 15);
+  // optionally, reduce the payload size.  seems to
+  // improve reliability
+  //radio.setPayloadSize(8);
+
+  radio.openWritingPipe(pipes[1]);
+  radio.openReadingPipe(1, pipes[0]);
+
   radio.startListening();
-  while (!radio.available())
-  radio.read(&buttonState, sizeof(buttonState));
-  if (buttonState == HIGH) {
-    digitalWrite(led, HIGH);
-    Serial.println("Activo");
+  delay(200);
+  radio.printDetails();                   // Dump the configuration of the rf unit for debugging
+  Serial.println("End Config RF 2.4GHz");
+}
+
+void setup() {
+  configSerial();
+  configRF();
+}
+
+
+void interactRF() {
+  // Importante!!! Borrar true
+  if (radio.available()) { // Si hay datos disponibles
+      Serial.print("Recibi");
+  //if (true || radio.available()) { // Solo para pruebas
+    char got_isla[2];
+    bool done = false;
+    while (!done) {
+      // Espera aqui hasta recibir algo
+
+      done = radio.read(&got_isla, 2);
+      Serial.print("Dato Recibido = ");
+      Serial.print((int)got_isla[0]);
+      Serial.print(",");
+      Serial.println((int)got_isla[1]);
+      delay(20); // Para dar tiempo al emisor
+    }
+
+    // radio.stopListening(); // Dejamos d escuchar para poder hablar
+    //
+    // radio.write(&got_isla, 2);
+    // Serial.println("Enviando Respuesta");
+    // radio.startListening(); // Volvemos a la escucha para recibir mas
   }
-  else {
-    digitalWrite(led, LOW);
-    Serial.println("Inactivo");
-  }
+}
+
+void loop() {
+  interactRF();
+  // delay(1000); // Quitar, solo sirve para pruebas
 }

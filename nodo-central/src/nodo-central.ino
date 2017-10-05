@@ -22,7 +22,8 @@ https://github.com/DavyLandman/AESLib
  */
 #include "RF24.h"
 #include "nRF24L01.h"
-#include <SPI.h>
+//#include <SPI.h>
+#include "printf.h" // For test purpose
 /*Fin*/
 
 /**
@@ -40,12 +41,12 @@ byte mac[] = {0xDE, 0xBD, 0xBE, 0xEF, 0xFE, 0xED};
 // if you don't want to use DNS (and reduce your sketch size)
 // use the numeric IP instead of the name for the server:
 // IPAddress server(10, 145, 20, 62); // numeric IP for Google (no DNS)
-IPAddress server(192, 168, 1, 2);
+IPAddress server(172, 16, 0, 1); //IP servidor SSE
 // char server[] = "192.168.1.238";    // name address for Google (using DNS)
 // IP Servicio Web Destino de Datos
 
 // Set the static IP address to use if the DHCP fails to assign
-IPAddress ip(192, 168, 1, 20); // IP Arduino
+IPAddress ip(172, 16, 0, 2); // IP Arduino
 
 // Initialize the Ethernet client library
 // with the IP address and port of the server
@@ -57,7 +58,7 @@ EthernetClient client;
  * Variables Módulo RF
  */
 RF24 radio(9, 10);
-const uint64_t pipes[2] = {0xF0F0F0F0E1LL, 0xF0F0F0F0D2LL};
+const uint64_t pipes[2] = { 0xF0F0F0F0E1LL, 0xF0F0F0F0D2LL }; // LongLong = 64 bits.
 /*Fin*/
 
 /**
@@ -72,7 +73,7 @@ volatile byte pulsadorEstadoAnterior = 0;
 
 void setup() {
   configSerial();
-  configEthernet();
+  //configEthernet();
   //sendDataEthernet();
   configRF();
   configPulsador();
@@ -92,28 +93,41 @@ void configSerial() {
 
 void configEthernet() {
   // start the Ethernet connection:
-  Serial.println("Try to config Ethernet using DHCP");
-  if (Ethernet.begin(mac) == 0) {//uncomment
+  //Serial.println("Try to config Ethernet using DHCP");// Solo para pruebas
+  //if (Ethernet.begin(mac) == 0) {//uncomment
     Serial.println("Failed to configure Ethernet using DHCP");
     // no point in carrying on, so do nothing forevermore:
     // try to congifure using IP address instead of DHCP:
     Ethernet.begin(mac, ip);
-  }
+  //}
   // give the Ethernet shield a second to initialize:
   delay(100);
   Serial.println("Connecting...");
 }
 
 void configRF() {
-  Serial.println("Config RF 2.4GHz");
-  //pinMode(53, OUTPUT); Only for mega
+  printf_begin();
+  printf("\n\rnRF24L01 NODO CENTRAL\n\r");
+  //pinMode(10, OUTPUT); //Only for mega
+
   radio.begin();
-  radio.setPALevel(RF24_PA_LOW);
-  //radio.setRetries(15, 15);
-  // radio.setPayloadSize(8);
+  radio.setChannel(124);
+  radio.setPALevel(RF24_PA_MIN);
+  radio.setDataRate(RF24_2MBPS);
+  radio.setAutoAck(1);                     // Ensure autoACK is enabled
+  radio.setCRCLength(RF24_CRC_8);          // Use 8-bit CRC for performance
+  // optionally, increase the delay between retries & # of retries
+  radio.setRetries(15, 15);
+  // optionally, reduce the payload size.  seems to
+  // improve reliability
+  radio.setPayloadSize(8);
   radio.openWritingPipe(pipes[1]);
   radio.openReadingPipe(1, pipes[0]);
+
   radio.startListening();
+  delay(200);
+  radio.printDetails();                   // Dump the configuration of the rf unit for debugging
+  Serial.println("End Config RF 2.4GHz");
 }
 
 // http://www.prometec.net/operaciones-bits/
@@ -212,7 +226,7 @@ void loop() {
   interactRF();
   // delay(1000); // Quitar, solo sirve para pruebas
   //sendDataEthernet(10, 1);
-  sensarPulsador();
+  //sensarPulsador();
 }
 
 void interactEthernet() {
@@ -247,37 +261,31 @@ void interactRF() {
   //  }
   //
   // radio.startListening();
+  radio.startListening();
 
+  if (radio.available()) { // Si hay datos disponibles
+  //if (true || radio.available()) { // Solo para pruebas
+    char got_isla[2];
+    bool done = false;
+    while (!done) {
+      // Espera aqui hasta recibir algo
 
-  //Serial.print("N");
-  if(pulsadorEstadoAnterior != pulsadorEstado){
-    sendDataEthernet(1, (int)pulsadorEstado);
-    pulsadorEstadoAnterior = pulsadorEstado;
+      done = radio.read(&got_isla, 2);
+      Serial.print("Dato Recibido = ");
+      Serial.print((int)got_isla[0]);
+      Serial.print(",");
+      Serial.println((int)got_isla[1]);
+      delay(20); // Para dar tiempo al emisor
+    }
+
+    // radio.stopListening(); // Dejamos d escuchar para poder hablar
+    //
+    // radio.write(&got_isla, 2);
+    // Serial.println("Enviando Respuesta");
+    // radio.startListening(); // Volvemos a la escucha para recibir mas
+    // paquetes
+    //sendDataEthernet(got_isla[0], got_isla[1]); // Se envía get
   }
-
-  // if (radio.available()) { // Si hay datos disponibles
-  // //if (true || radio.available()) { // Solo para pruebas
-  //   char got_isla[2];
-  //   bool done = false;
-  //   while (!done) {
-  //     // Espera aqui hasta recibir algo
-  //
-  //     done = radio.read(&got_isla, 2);
-  //     Serial.print("Dato Recibido = ");
-  //     Serial.print((int)got_isla[0]);
-  //     Serial.print(",");
-  //     Serial.println((int)got_isla[1]);
-  //     delay(20); // Para dar tiempo al emisor
-  //   }
-  //
-  //   // radio.stopListening(); // Dejamos d escuchar para poder hablar
-  //   //
-  //   // radio.write(&got_isla, 2);
-  //   // Serial.println("Enviando Respuesta");
-  //   // radio.startListening(); // Volvemos a la escucha para recibir mas
-  //   // paquetes
-  //   sendDataEthernet(got_isla[0], got_isla[1]); // Se envía get
-  // }
 }
 
 void sensarPulsador(){
